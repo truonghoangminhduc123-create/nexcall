@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <title>NexCall Ultra - Live Connect</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #020617;
+            --accent-primary: #38bdf8;
+            --accent-secondary: #818cf8;
+            --glass: rgba(15, 23, 42, 0.8);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f8fafc;
+            --text-muted: #64748b;
+            --danger: #ef4444;
+            --success: #10b981;
+        }
+
+        * { box-sizing: border-box; transition: transform 0.1s linear, opacity 0.3s ease; touch-action: none; }
+        body {
+            margin: 0; font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-color); color: var(--text-main); height: 100vh; overflow: hidden;
+        }
+
+        /* ====== HOME UI ====== */
+        .home { height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .hero-card {
+            width: 100%; max-width: 400px; background: var(--glass); backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border); border-radius: 32px; padding: 48px 32px; text-align: center;
+        }
+        input {
+            width: 100%; padding: 14px 18px; border-radius: 16px; border: 1px solid var(--glass-border);
+            background: rgba(0, 0, 0, 0.3); color: white; margin-bottom: 12px; outline: none;
+        }
+        .btn {
+            width: 100%; padding: 16px; border-radius: 16px; font-weight: 700; cursor: pointer; border: none;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)); color: #020617; }
+        .btn-outline { background: transparent; border: 1px solid var(--glass-border); color: var(--text-main); }
+
+        /* ====== ROOM UI ====== */
+        #room { display: none; height: 100vh; flex-direction: column; }
+        .nav {
+            height: 70px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; border-bottom: 1px solid var(--glass-border);
+        }
+        .tab-bar { display: flex; background: rgba(255,255,255,0.03); padding: 5px; border-radius: 14px; }
+        .tab-btn {
+            padding: 10px 16px; border-radius: 10px; cursor: pointer; border: none; background: transparent;
+            color: var(--text-muted); display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600;
+        }
+        .tab-btn.active { background: rgba(56, 189, 248, 0.15); color: var(--accent-primary); }
+
+        .content-area { flex: 1; position: relative; }
+        .tab-content { position: absolute; inset: 0; display: none; flex-direction: column; padding: 20px; }
+        .tab-content.active { display: flex; }
+
+        /* TAB: BOARD */
+        .canvas-container { 
+            flex: 1; background: #000; border-radius: 24px; overflow: hidden; 
+            position: relative; border: 1px solid var(--glass-border); 
+        }
+        #board { background: #fff; width: 100%; height: 100%; display: block; }
+        
+        .remote-cursor {
+            position: absolute; pointer-events: none; z-index: 100;
+            display: flex; flex-direction: column; align-items: center;
+            opacity: 0; transform: translate(-50%, -50%);
+        }
+        .cursor-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent-primary); border: 2px solid white; }
+        .cursor-label { 
+            margin-top: 4px; background: var(--accent-primary); color: #020617; 
+            font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px;
+        }
+
+        /* TOAST NOTIFICATION */
+        #toast-container {
+            position: fixed; top: 80px; right: 20px; z-index: 1000;
+            display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+        }
+        .toast {
+            background: var(--glass); backdrop-filter: blur(10px); color: white;
+            padding: 12px 20px; border-radius: 12px; border: 1px solid var(--glass-border);
+            font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 10px;
+            animation: toastIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+        }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(50px); } to { opacity: 1; transform: translateX(0); } }
+
+        /* MEMBER LIST */
+        .member-item {
+            background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
+            padding: 16px; border-radius: 16px; display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
+
+        /* CHAT */
+        #chat-box { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; }
+        .msg-bubble { padding: 12px 16px; border-radius: 18px; font-size: 14px; background: rgba(255,255,255,0.05); }
+        .me .msg-bubble { background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)); color: #020617; }
+
+        .controls { margin-top: 16px; display: flex; justify-content: center; gap: 12px; }
+        .tool-btn {
+            width: 50px; height: 50px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+            background: var(--glass); border: 1px solid var(--glass-border); color: white; cursor: pointer;
+        }
+        .tool-btn.active-mic { background: var(--success); }
+    </style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<div class="home" id="home">
+    <div class="hero-card">
+        <h1 style="margin:0 0 20px">NexCall Ultra</h1>
+        <button class="btn btn-primary" onclick="initPeer(true)">Tạo phòng mới</button>
+        <div style="margin: 20px 0; color: var(--text-muted); font-size: 12px;">HOẶC</div>
+        <input id="roomInput" placeholder="Nhập mã phòng...">
+        <button class="btn btn-outline" onclick="initPeer(false)">Vào phòng</button>
+    </div>
+</div>
+
+<div id="room">
+    <div class="nav">
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="showTab('board')"><i data-lucide="palette" size="18"></i> Bảng</button>
+            <button class="tab-btn" onclick="showTab('chat')"><i data-lucide="message-circle" size="18"></i> Chat</button>
+            <button class="tab-btn" onclick="showTab('members')"><i data-lucide="users" size="18"></i> Online</button>
+        </div>
+        <div style="font-size: 12px; font-weight: 700; color: var(--text-muted);">ID: <span id="my-id-val" style="color: var(--accent-primary);">---</span></div>
+        <button class="tool-btn" style="width:36px; height:36px; background:var(--danger)" onclick="location.reload()"><i data-lucide="power" size="16"></i></button>
+    </div>
+
+    <div class="content-area">
+        <div id="tab-board" class="tab-content active">
+            <div class="canvas-container" id="canvas-wrap">
+                <canvas id="board"></canvas>
+                <div id="remote-cursors-container"></div>
+            </div>
+            <div class="controls">
+                <button id="micBtn" class="tool-btn active-mic" onclick="toggleMic()"><i data-lucide="mic" id="micIcon" size="20"></i></button>
+                <button class="tool-btn" onclick="emote('👍')">👍</button>
+                <button class="tool-btn" onclick="emote('😂')">😂</button>
+                <button class="tool-btn" style="background:var(--danger)" onclick="clearBoard()"><i data-lucide="trash-2" size="20"></i></button>
+            </div>
+        </div>
+
+        <div id="tab-chat" class="tab-content">
+            <div id="chat-box"></div>
+            <div style="display:flex; gap:10px;">
+                <input id="msg" placeholder="Nhắn tin..." style="margin:0" onkeypress="if(event.key==='Enter') sendChat()">
+                <button class="btn btn-primary" style="width:50px" onclick="sendChat()"><i data-lucide="send" size="18"></i></button>
+            </div>
+        </div>
+
+        <div id="tab-members" class="tab-content">
+            <h3 style="margin-top:0">Đang hoạt động</h3>
+            <div id="member-list"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    lucide.createIcons();
+    let peer, localStream, connections = {};
+    let isMuted = false;
+    let cursorTimeouts = {};
+
+    const canvas = document.getElementById("board");
+    const ctx = canvas.getContext("2d");
+    
+    function resizeCanvas() {
+        const wrap = document.getElementById('canvas-wrap');
+        if(!wrap) return;
+        canvas.width = wrap.clientWidth;
+        canvas.height = wrap.clientHeight;
+        ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = 3; ctx.strokeStyle = "#1e293b";
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // --- NOTIFICATION SYSTEM ---
+    function showToast(msg, type = 'success') {
+        const container = document.getElementById('toast-container');
+        const t = document.createElement('div');
+        t.className = 'toast';
+        const icon = type === 'success' ? 'user-plus' : 'user-minus';
+        const color = type === 'success' ? '#10b981' : '#ef4444';
+        t.innerHTML = `<i data-lucide="${icon}" color="${color}" size="18"></i> <span>${msg}</span>`;
+        container.appendChild(t);
+        lucide.createIcons();
+        setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
+    }
+
+    async function initPeer(isHost) {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const id = isHost ? 'NEX-' + Math.random().toString(36).slice(2, 7).toUpperCase() : null;
+            peer = new Peer(id);
+
+            peer.on('open', (id) => {
+                document.getElementById('home').style.display = 'none';
+                document.getElementById('room').style.display = 'flex';
+                document.getElementById('my-id-val').textContent = id;
+                resizeCanvas();
+                updateMemberList();
+                if (!isHost) {
+                    const target = document.getElementById('roomInput').value.trim();
+                    if(target) connectTo(target);
+                }
+            });
+
+            peer.on('call', call => {
+                call.answer(localStream);
+                call.on('stream', stream => { const a = new Audio(); a.srcObject = stream; a.play(); });
+            });
+
+            peer.on('connection', conn => setupConn(conn));
+        } catch(e) { alert("Cần quyền Micro!"); }
+    }
+
+    function connectTo(id) {
+        peer.call(id, localStream).on('stream', stream => { const a = new Audio(); a.srcObject = stream; a.play(); });
+        setupConn(peer.connect(id));
+    }
+
+    function setupConn(conn) {
+        connections[conn.peer] = conn;
+        conn.on('open', () => {
+            showToast(`${conn.peer.substring(0,5)} đã tham gia`, 'success');
+            updateMemberList();
+        });
+        conn.on('data', data => {
+            if(data.type === 'cursor') updateRemoteCursor(conn.peer, data.x, data.y);
+            if(data.type === 'chat') addChat(conn.peer.substring(0,5), data.text);
+            if(data.type === 'draw') {
+                ctx.beginPath();
+                ctx.moveTo(data.lx * canvas.width, data.ly * canvas.height);
+                ctx.lineTo(data.x * canvas.width, data.y * canvas.height);
+                ctx.stroke();
+            }
+            if(data.type === 'clear') ctx.clearRect(0,0,canvas.width,canvas.height);
+        });
+        conn.on('close', () => { 
+            showToast(`${conn.peer.substring(0,5)} đã rời phòng`, 'danger');
+            const el = document.getElementById('cursor-' + conn.peer);
+            if(el) el.remove();
+            delete connections[conn.peer];
+            updateMemberList();
+        });
+    }
+
+    function updateMemberList() {
+        const list = document.getElementById('member-list');
+        list.innerHTML = `<div class="member-item"><div><strong>Tôi (Bạn)</strong><br><small>${peer.id}</small></div><div class="status-dot"></div></div>`;
+        Object.keys(connections).forEach(id => {
+            list.innerHTML += `<div class="member-item"><div><strong>Partner</strong><br><small>${id}</small></div><div class="status-dot"></div></div>`;
+        });
+    }
+
+    function updateRemoteCursor(peerId, xPercent, yPercent) {
+        let cursorEl = document.getElementById('cursor-' + peerId);
+        if(!cursorEl) {
+            cursorEl = document.createElement('div');
+            cursorEl.id = 'cursor-' + peerId;
+            cursorEl.className = 'remote-cursor';
+            cursorEl.innerHTML = `<div class="cursor-dot"></div><div class="cursor-label">${peerId.substring(0,5)}</div>`;
+            document.getElementById('remote-cursors-container').appendChild(cursorEl);
+        }
+        const wrap = document.getElementById('canvas-wrap');
+        cursorEl.style.left = (xPercent * wrap.clientWidth) + 'px';
+        cursorEl.style.top = (yPercent * wrap.clientHeight) + 'px';
+        cursorEl.style.opacity = '1';
+        clearTimeout(cursorTimeouts[peerId]);
+        cursorTimeouts[peerId] = setTimeout(() => { cursorEl.style.opacity = '0'; }, 2000);
+    }
+
+    // --- DRAWING & EVENTS ---
+    let drawing = false, lastX = 0, lastY = 0;
+    function getPos(e) {
+        const r = canvas.getBoundingClientRect();
+        const cx = e.touches ? e.touches[0].clientX : e.clientX;
+        const cy = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: (cx - r.left)/r.width, y: (cy - r.top)/r.height };
+    }
+    canvas.addEventListener('pointermove', e => {
+        const p = getPos(e);
+        broadcast({ type: 'cursor', x: p.x, y: p.y });
+        if(!drawing) return;
+        ctx.beginPath(); ctx.moveTo(lastX*canvas.width, lastY*canvas.height); ctx.lineTo(p.x*canvas.width, p.y*canvas.height); ctx.stroke();
+        broadcast({ type: 'draw', x: p.x, y: p.y, lx: lastX, ly: lastY });
+        lastX = p.x; lastY = p.y;
+    });
+    canvas.addEventListener('pointerdown', e => { drawing = true; const p = getPos(e); lastX = p.x; lastY = p.y; });
+    window.addEventListener('pointerup', () => drawing = false);
+
+    function broadcast(d) { Object.values(connections).forEach(c => c.open && c.send(d)); }
+    function showTab(t) {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab-'+t).classList.add('active');
+        event.currentTarget.classList.add('active');
+        if(t === 'board') setTimeout(resizeCanvas, 50);
+    }
+    function sendChat() {
+        const i = document.getElementById('msg');
+        if(!i.value) return;
+        broadcast({type:'chat', text: i.value});
+        addChat("Tôi", i.value, true);
+        i.value = "";
+    }
+    function addChat(user, text, isMe = false) {
+        const box = document.getElementById('chat-box');
+        const group = document.createElement('div');
+        group.className = `chat-group ${isMe ? 'me' : ''}`;
+        group.innerHTML = `<div class="msg-bubble"><strong>${user}:</strong> ${text}</div>`;
+        box.appendChild(group);
+        box.scrollTop = box.scrollHeight;
+    }
+    function toggleMic() {
+        isMuted = !isMuted;
+        localStream.getAudioTracks()[0].enabled = !isMuted;
+        document.getElementById('micBtn').className = isMuted ? "tool-btn" : "tool-btn active-mic";
+        document.getElementById('micIcon').setAttribute('data-lucide', isMuted?'mic-off':'mic');
+        lucide.createIcons();
+    }
+    function clearBoard() { ctx.clearRect(0,0,canvas.width,canvas.height); broadcast({type:'clear'}); }
+    function emote(e) { broadcast({type:'chat', text:e}); addChat("Tôi", e, true); }
+</script>
+</body>
+</html>
